@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>เครื่องวัดระดับความดังเสียง</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #121212;
+            color: #ffffff;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .container {
+            text-align: center;
+            width: 100%;
+            max-width: 400px;
+            padding: 30px 20px;
+            background-color: #1e1e1e;
+            border-radius: 16px;
+            border: 1px solid #333;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            margin-bottom: 20px;
+            color: #f1f1f1;
+        }
+
+        /* ส่วนแสดงตัวเลขเดซิเบล */
+        .db-display {
+            font-size: 3.5rem;
+            font-weight: bold;
+            color: #00e676;
+            margin: 10px 0;
+        }
+
+        .unit {
+            font-size: 1.2rem;
+            color: #888;
+        }
+
+        /* แถบวัดความดังเสียง (Volume Bar) */
+        .meter-container {
+            width: 100%;
+            height: 24px;
+            background-color: #2a2a2a;
+            border-radius: 12px;
+            overflow: hidden;
+            margin: 20px 0;
+            border: 1px solid #444;
+        }
+
+        .meter-fill {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #00e676 60%, #ffeb3b 85%, #ff5252 100%);
+            transition: width 0.1s ease-out;
+        }
+
+        /* ส่วนปรับจูนค่า Calibration Offset */
+        .calibration-container {
+            background-color: #262626;
+            border: 1px solid #3d3d3d;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 20px;
+            text-align: left;
+        }
+
+        .calibration-label {
+            font-size: 0.9rem;
+            color: #bbb;
+            margin-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .calibration-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .calibration-input {
+            width: 70px;
+            padding: 6px;
+            background-color: #121212;
+            border: 1px solid #444;
+            border-radius: 6px;
+            color: #00e676;
+            font-size: 1rem;
+            font-weight: bold;
+            text-align: center;
+        }
+
+        .calibration-slider {
+            flex-grow: 1;
+            accent-color: #007bff;
+            cursor: pointer;
+        }
+
+        /* ปุ่มกด */
+        .btn {
+            display: inline-block;
+            width: 100%;
+            padding: 14px;
+            background-color: #007bff;
+            color: #ffffff;
+            border: none;
+            border-radius: 10px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .btn:hover {
+            background-color: #0056b3;
+        }
+
+        .btn.stop {
+            background-color: #ff5252;
+        }
+
+        .btn.stop:hover {
+            background-color: #d32f2f;
+        }
+
+        .status {
+            margin-top: 15px;
+            font-size: 0.85rem;
+            color: #aaa;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>วัดระดับความดังเสียง</h1>
+        
+        <div class="db-display">
+            <span id="dbValue">0</span> <span class="unit">dB</span>
+        </div>
+
+        <div class="meter-container">
+            <div id="meterFill" class="meter-fill"></div>
+        </div>
+
+        <!-- ส่วนปรับแต่ง Calibration / Offset -->
+        <div class="calibration-container">
+            <div class="calibration-label">
+                <span>ปรับจูนความดัง (Calibrate Offset):</span>
+                <span id="offsetValText">+0 dB</span>
+            </div>
+            <div class="calibration-controls">
+                <input type="range" id="offsetSlider" class="calibration-slider" min="-50" max="50" value="0" step="1">
+                <input type="number" id="offsetInput" class="calibration-input" value="0" min="-50" max="50">
+            </div>
+        </div>
+
+        <button id="startBtn" class="btn">เริ่มวัดเสียง</button>
+        <p id="statusText" class="status">กดปุ่มเพื่ออนุญาตใช้งานไมโครโฟน</p>
+    </div>
+
+    <script>
+        let audioContext;
+        let analyser;
+        let microphone;
+        let javascriptNode;
+        let isMeasuring = false;
+
+        const startBtn = document.getElementById('startBtn');
+        const dbValue = document.getElementById('dbValue');
+        const meterFill = document.getElementById('meterFill');
+        const statusText = document.getElementById('statusText');
+        
+        // ตัวแปรส่วนปรับจูนค่า Offset
+        const offsetSlider = document.getElementById('offsetSlider');
+        const offsetInput = document.getElementById('offsetInput');
+        const offsetValText = document.getElementById('offsetValText');
+
+        // ฟังก์ชั่นอัปเดตค่า Offset เมื่อผู้ใช้ปรับเปลี่ยน Slider หรือ Input
+        function updateOffset(val) {
+            let offset = parseInt(val) || 0;
+            if (offset > 50) offset = 50;
+            if (offset < -50) offset = -50;
+            
+            offsetSlider.value = offset;
+            offsetInput.value = offset;
+            offsetValText.innerText = (offset >= 0 ? '+' : '') + offset + ' dB';
+        }
+
+        offsetSlider.addEventListener('input', (e) => updateOffset(e.target.value));
+        offsetInput.addEventListener('change', (e) => updateOffset(e.target.value));
+
+        startBtn.addEventListener('click', () => {
+            if (!isMeasuring) {
+                startAudio();
+            } else {
+                stopAudio();
+            }
+        });
+
+        async function startAudio() {
+            try {
+                // ขออนุญาตใช้งานไมโครโฟน
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+                
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                analyser = audioContext.createAnalyser();
+                microphone = audioContext.createMediaStreamSource(stream);
+
+                analyser.fftSize = 512;
+                analyser.smoothingTimeConstant = 0.8;
+
+                // สร้าง ScriptProcessor เพื่ออ่านค่า Audio Buffer
+                javascriptNode = audioContext.createScriptProcessor(2048, 1, 1);
+                
+                microphone.connect(analyser);
+                analyser.connect(javascriptNode);
+                javascriptNode.connect(audioContext.destination);
+
+                javascriptNode.onaudioprocess = () => {
+                    const array = new Uint8Array(analyser.frequencyBinCount);
+                    analyser.getByteFrequencyData(array);
+
+                    // คำนวณค่า RMS (Root Mean Square)
+                    let values = 0;
+                    const length = array.length;
+                    for (let i = 0; i < length; i++) {
+                        values += (array[i] * array[i]);
+                    }
+                    const rms = Math.sqrt(values / length);
+
+                    // คำนวณความดังเป็น dB (การประมาณค่าสำหรับ Web Browser)
+                    let rawDb = 0;
+                    if (rms > 0) {
+                        rawDb = Math.round(20 * Math.log10(rms));
+                    }
+
+                    // ดึงค่า Offset มาบวกลบเพิ่ม
+                    const currentOffset = parseInt(offsetInput.value) || 0;
+                    let calibratedDb = rawDb + currentOffset;
+
+                    // ปรับสเกล dB ให้อยู่ในช่วง 0 - 120 dB
+                    calibratedDb = Math.min(Math.max(calibratedDb, 0), 120);
+
+                    // อัปเดตการแสดงผล
+                    dbValue.innerText = calibratedDb;
+                    meterFill.style.width = Math.min((calibratedDb / 120) * 100, 100) + '%';
+                };
+
+                isMeasuring = true;
+                startBtn.innerText = 'หยุดวัดเสียง';
+                startBtn.classList.add('stop');
+                statusText.innerText = 'กำลังวัดระดับเสียงแบบเรียลไทม์...';
+
+            } catch (err) {
+                alert('ไม่สามารถเข้าถึงไมโครโฟนได้: ' + err.message);
+            }
+        }
+
+        function stopAudio() {
+            if (audioContext) {
+                audioContext.close();
+            }
+            isMeasuring = false;
+            startBtn.innerText = 'เริ่มวัดเสียง';
+            startBtn.classList.remove('stop');
+            statusText.innerText = 'หยุดการวัดเสียงแล้ว';
+            dbValue.innerText = '0';
+            meterFill.style.width = '0%';
+        }
+    </script>
+
+</body>
+</html>
