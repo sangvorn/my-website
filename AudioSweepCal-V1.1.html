@@ -1,0 +1,1034 @@
+<!DOCTYPE html>
+<html lang="th" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Audio Sweep Studio - 10kHz-20kHz Sweep & FFT Spectrum Analyzer</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Google Fonts Inter & Sarabun -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'Sarabun', 'sans-serif'],
+          },
+          colors: {
+            studio: {
+              900: '#0b0f19',
+              800: '#111827',
+              700: '#1f2937',
+              600: '#374151',
+            },
+            neon: {
+              cyan: '#06b6d4',
+              pink: '#ec4899',
+              green: '#22c55e',
+              yellow: '#eab308',
+              purple: '#a855f7'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  
+  <style>
+    body {
+      background-color: #0b0f19;
+      color: #f3f4f6;
+      user-select: none;
+    }
+    
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #111827;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #374151;
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #06b6d4;
+    }
+
+    .glow-cyan { box-shadow: 0 0 15px rgba(6, 182, 212, 0.25); }
+    .glow-pink { box-shadow: 0 0 15px rgba(236, 72, 153, 0.25); }
+    .glow-purple { box-shadow: 0 0 15px rgba(168, 85, 247, 0.25); }
+    
+    .text-glow-cyan { text-shadow: 0 0 8px rgba(6, 182, 212, 0.6); }
+    .text-glow-pink { text-shadow: 0 0 8px rgba(236, 72, 153, 0.6); }
+    .text-glow-purple { text-shadow: 0 0 8px rgba(168, 85, 247, 0.6); }
+    
+    input[type=range] {
+      -webkit-appearance: none;
+      background: #1f2937;
+      border-radius: 6px;
+      height: 6px;
+    }
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      height: 18px;
+      width: 18px;
+      border-radius: 50%;
+      background: #06b6d4;
+      cursor: pointer;
+      box-shadow: 0 0 10px rgba(6, 182, 212, 0.8);
+      transition: all 0.15s ease;
+    }
+    input[type=range]::-webkit-slider-thumb:hover {
+      transform: scale(1.15);
+      background: #22d3ee;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col font-sans antialiased text-gray-200">
+
+  <header class="bg-studio-800/80 backdrop-blur border-b border-gray-800 sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-4">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-600 to-pink-500 flex items-center justify-center shadow-lg shadow-cyan-500/20">
+          <i class="fa-solid fa-wave-square text-white text-xl"></i>
+        </div>
+        <div>
+          <h1 class="text-lg font-bold tracking-tight text-white flex items-center gap-2">
+            AudioSweep <span class="text-cyan-400 font-mono text-xs px-2 py-0.5 rounded bg-cyan-950/80 border border-cyan-800">PRO v1.1 Calibrated</span>
+          </h1>
+          <p class="text-xs text-gray-400">10Hz - 22kHz Sine Sweep Generator & Real-time Spectrum Analyzer</p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-4">
+        <div id="audioContextBadge" class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-studio-900 border border-gray-800 text-xs">
+          <span id="statusIndicator" class="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse"></span>
+          <span id="statusText" class="text-gray-300 font-medium">Engine Standby</span>
+        </div>
+        <button id="btnInitAudio" onclick="startAudioEngine()" class="px-4 py-1.5 bg-gradient-to-r from-cyan-600 to-cyan-500 hover:from-cyan-500 hover:to-cyan-400 text-white font-medium text-xs rounded-lg shadow-md transition flex items-center gap-2">
+          <i class="fa-solid fa-power-off"></i>
+          <span>เปิดใช้งานระบบเสียง (Start Audio)</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+    <!-- LEFT COLUMN -->
+    <div class="lg:col-span-4 flex flex-col gap-6">
+
+      <!-- PANEL 1: Sweep Signal Generator -->
+      <div class="bg-studio-800 rounded-2xl p-5 border border-gray-800 shadow-xl flex flex-col gap-4 relative overflow-hidden">
+        <div class="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-cyan-500 to-blue-600"></div>
+        
+        <div class="flex items-center justify-between border-b border-gray-700/60 pb-3">
+          <div class="flex items-center gap-2">
+            <i class="fa-solid fa-sliders text-cyan-400"></i>
+            <h2 class="font-bold text-base text-white">เครื่องกำเนิดสัญญาณ (Generator)</h2>
+          </div>
+          <span class="text-xs text-cyan-400/80 font-mono">Web Audio Oscillator</span>
+        </div>
+
+        <div class="grid grid-cols-2 bg-studio-900 p-1 rounded-xl border border-gray-800 text-xs">
+          <button id="tabModeSweep" onclick="setGeneratorMode('sweep')" class="py-2 rounded-lg font-semibold bg-cyan-600 text-white transition shadow-sm">
+            <i class="fa-solid fa-arrow-trend-up mr-1"></i> Audio Sweep
+          </button>
+          <button id="tabModeFixed" onclick="setGeneratorMode('fixed')" class="py-2 rounded-lg font-semibold text-gray-400 hover:text-white transition">
+            <i class="fa-solid fa-music mr-1"></i> Fixed Tone
+          </button>
+        </div>
+
+        <div id="containerSweepControls" class="flex flex-col gap-4">
+          <div>
+            <label class="text-xs text-gray-400 font-medium mb-1.5 block">ชุดความถี่สำเร็จรูป (Quick Presets):</label>
+            <div class="grid grid-cols-2 gap-2 text-xs">
+              <button onclick="setFreqPreset(10000, 20000)" class="px-2.5 py-1.5 bg-cyan-950/60 hover:bg-cyan-900/80 border border-cyan-800/80 text-cyan-300 rounded-lg text-left transition flex items-center justify-between">
+                <span>10 kHz - 22 kHz</span>
+                <span class="text-[10px] text-cyan-500">(Tweeter)</span>
+              </button>
+              <button onclick="setFreqPreset(20, 20000)" class="px-2.5 py-1.5 bg-studio-900 hover:bg-studio-700 border border-gray-700 text-gray-300 rounded-lg text-left transition flex items-center justify-between">
+                <span>20 Hz - 22 kHz</span>
+                <span class="text-[10px] text-gray-500">(Full)</span>
+              </button>
+              <button onclick="setFreqPreset(20, 500)" class="px-2.5 py-1.5 bg-studio-900 hover:bg-studio-700 border border-gray-700 text-gray-300 rounded-lg text-left transition flex items-center justify-between">
+                <span>20 Hz - 1000 Hz</span>
+                <span class="text-[10px] text-gray-500">(Sub)</span>
+              </button>
+              <button onclick="setFreqPreset(1000, 8000)" class="px-2.5 py-1.5 bg-studio-900 hover:bg-studio-700 border border-gray-700 text-gray-300 rounded-lg text-left transition flex items-center justify-between">
+                <span>1 kHz - 8 kHz</span>
+                <span class="text-[10px] text-gray-500">(Mid)</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="text-xs text-gray-400 block mb-1">เริ่มต้น (Start Freq):</label>
+              <div class="relative">
+                <input type="number" id="inputStartFreq" value="10000" min="10" max="22000" step="10"
+                       class="w-full bg-studio-900 border border-gray-700 rounded-lg px-3 py-1.5 text-sm font-mono text-cyan-400 focus:outline-none focus:border-cyan-500">
+                <span class="absolute right-2.5 top-1.5 text-xs text-gray-500">Hz</span>
+              </div>
+            </div>
+            <div>
+              <label class="text-xs text-gray-400 block mb-1">สิ้นสุด (End Freq):</label>
+              <div class="relative">
+                <input type="number" id="inputEndFreq" value="20000" min="10" max="22000" step="10"
+                       class="w-full bg-studio-900 border border-gray-700 rounded-lg px-3 py-1.5 text-sm font-mono text-pink-400 focus:outline-none focus:border-pink-500">
+                <span class="absolute right-2.5 top-1.5 text-xs text-gray-500">Hz</span>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div class="flex justify-between items-center mb-1">
+              <label class="text-xs text-gray-400">ระยะเวลา Sweep (Duration):</label>
+              <span id="durationValLabel" class="text-xs font-mono text-cyan-400">2.0s</span>
+            </div>
+            <div class="grid grid-cols-6 gap-1.5 text-xs">
+              <button onclick="setDuration(0.5)" class="dur-btn py-1 rounded bg-studio-900 hover:bg-studio-700 border border-gray-700 text-gray-300">0.5s</button>
+              <button onclick="setDuration(1.0)" class="dur-btn py-1 rounded bg-studio-900 hover:bg-studio-700 border border-gray-700 text-gray-300">1.0s</button>
+              <button onclick="setDuration(2.0)" class="dur-btn active-dur py-1 rounded bg-cyan-600 text-white font-semibold">2.0s</button>
+              <button onclick="setDuration(3.0)" class="dur-btn py-1 rounded bg-studio-900 hover:bg-studio-700 border border-gray-700 text-gray-300">3.0s</button>
+              <button onclick="setDuration(5.0)" class="dur-btn py-1 rounded bg-studio-900 hover:bg-studio-700 border border-gray-700 text-gray-300">5.0s</button>
+              <button onclick="setDuration(10.0)" class="dur-btn py-1 rounded bg-studio-900 hover:bg-studio-700 border border-gray-700 text-gray-300">10s</button>
+            </div>
+          </div>
+
+          <div>
+            <label class="text-xs text-gray-400 block mb-1">รูปแบบการ Sweep (Sweep Type):</label>
+            <div class="grid grid-cols-2 gap-2 text-xs">
+              <label class="flex items-center gap-2 p-2 bg-studio-900 rounded-lg border border-gray-800 cursor-pointer hover:border-gray-700">
+                <input type="radio" name="sweepType" value="logarithmic" checked class="accent-cyan-500">
+                <span class="text-gray-200">Logarithmic (Log)</span>
+              </label>
+              <label class="flex items-center gap-2 p-2 bg-studio-900 rounded-lg border border-gray-800 cursor-pointer hover:border-gray-700">
+                <input type="radio" name="sweepType" value="linear" class="accent-cyan-500">
+                <span class="text-gray-200">Linear (เชิงเส้น)</span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div id="containerFixedControls" class="hidden flex-col gap-4">
+          <div>
+            <div class="flex justify-between items-center mb-1">
+              <label class="text-xs text-gray-400">ความถี่คงที่ (Fixed Frequency):</label>
+              <span id="fixedFreqValue" class="text-sm font-mono text-cyan-400 font-bold">1,000 Hz</span>
+            </div>
+            <input type="range" id="sliderFixedFreq" min="10" max="22000" step="10" value="1000" class="w-full">
+            <div class="flex justify-between text-[10px] text-gray-500 mt-1 font-mono">
+              <span>10 Hz</span>
+              <span>1 kHz</span>
+              <span>10 kHz</span>
+              <span>22 kHz</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="pt-2 border-t border-gray-700/60">
+          <div class="flex justify-between items-center mb-1">
+            <label class="text-xs text-gray-400 flex items-center gap-1.5">
+              <i class="fa-solid fa-volume-high text-gray-400"></i>
+              <span>ความดังรวม (Master Volume):</span>
+            </label>
+            <span id="volumeValLabel" class="text-xs font-mono text-gray-300">50%</span>
+          </div>
+          <input type="range" id="sliderVolume" min="0" max="1" step="0.01" value="0.5" class="w-full">
+        </div>
+
+        <button id="btnPlaySweep" onclick="togglePlaySweep()" class="w-full py-3 bg-gradient-to-r from-cyan-500 to-pink-500 hover:from-cyan-400 hover:to-pink-400 text-white font-bold text-sm rounded-xl shadow-lg shadow-cyan-500/20 transition flex items-center justify-center gap-2 mt-2">
+          <i id="btnPlayIcon" class="fa-solid fa-play"></i>
+          <span id="btnPlayText">เล่นสัญญาณ Sweep (Play Sweep)</span>
+        </button>
+
+      </div>
+
+      <!-- PANEL 2: Microphone Input & Calibration -->
+      <div class="bg-studio-800 rounded-2xl p-5 border border-gray-800 shadow-xl flex flex-col gap-4 relative overflow-hidden">
+        <div class="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-green-500 to-emerald-700"></div>
+
+        <div class="flex items-center justify-between border-b border-gray-700/60 pb-3">
+          <div class="flex items-center gap-2">
+            <i class="fa-solid fa-microphone text-green-400"></i>
+            <h2 class="font-bold text-base text-white">ไมโครโฟนวัดเสียง (Input Mic)</h2>
+          </div>
+          <span id="micStatusText" class="text-xs font-mono text-gray-400">Mic Disconnected</span>
+        </div>
+
+        <button id="btnToggleMic" onclick="toggleMicrophone()" class="w-full py-2.5 bg-studio-900 hover:bg-studio-700 border border-green-500/40 text-green-400 font-semibold text-xs rounded-xl transition flex items-center justify-center gap-2">
+          <i class="fa-solid fa-microphone"></i>
+          <span id="btnMicText">เปิดไมโครโฟนวัดเสียง (Enable Mic)</span>
+        </button>
+
+        <!-- Measurement Utility Options -->
+        <div class="space-y-3 pt-1">
+          <label class="flex items-center justify-between text-xs text-gray-300 cursor-pointer p-2 rounded-lg bg-studio-900 border border-gray-800 hover:border-gray-700">
+            <span class="flex items-center gap-2">
+              <i class="fa-solid fa-arrows-rotate text-cyan-400"></i>
+              <span>ล้าง Peak Hold เมื่อเริ่ม Sweep ใหม่</span>
+            </span>
+            <input type="checkbox" id="chkSyncSweep" checked class="w-4 h-4 rounded accent-cyan-500">
+          </label>
+
+          <div class="flex items-center justify-between">
+            <label class="text-xs text-gray-400">ความละเอียด FFT (Resolution):</label>
+            <select id="selectFFTSize" onchange="updateFFTSize()" class="bg-studio-900 border border-gray-700 text-cyan-400 text-xs rounded-lg px-2.5 py-1 focus:outline-none">
+              <option value="2048">2048 bins (~21.5 Hz)</option>
+              <option value="4096">4096 bins (~10.7 Hz)</option>
+              <option value="8192" selected>8192 bins (~5.38 Hz High-Res)</option>
+              <option value="16384">16384 bins (~2.69 Hz Max)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- SPL Calibration System -->
+        <div class="mt-1 pt-4 border-t border-gray-700/60 space-y-3">
+          <label class="text-xs text-gray-400 font-medium block flex justify-between">
+            <span>คาลิเบรตความดัง (SPL Calibration):</span>
+            <span id="calStatusText" class="text-[10px] text-gray-500 font-mono">Raw dBFS</span>
+          </label>
+          
+          <div class="flex items-center gap-2">
+            <div class="relative w-28">
+              <input type="number" id="inputCalRef" value="94" step="0.1" title="ใส่ค่า dB ของ Calibrator"
+                     class="w-full bg-studio-900 border border-gray-700 rounded-lg px-2 py-1.5 text-xs font-mono text-amber-400 focus:outline-none focus:border-amber-500">
+              <span class="absolute right-2 top-1.5 text-[10px] text-gray-500">dB</span>
+            </div>
+            <button onclick="calibrateMic()" class="flex-1 py-1.5 bg-amber-900/40 hover:bg-amber-800/60 border border-amber-700/50 text-amber-400 text-xs rounded-lg transition shadow-sm">
+              <i class="fa-solid fa-crosshairs"></i> คำนวณอัตโนมัติ
+            </button>
+            <button onclick="resetCalibration()" class="px-2.5 py-1.5 bg-studio-900 hover:bg-studio-700 border border-gray-700 text-gray-400 text-xs rounded-lg transition" title="ล้างค่าชดเชยกลับไปใช้ dBFS">
+              <i class="fa-solid fa-rotate-left"></i>
+            </button>
+          </div>
+
+          <!-- เพิ่มช่องป้อนค่าชดเชย (Manual Offset Input) -->
+          <div class="bg-studio-900 p-2.5 rounded-lg border border-gray-800 flex items-center justify-between">
+            <label class="text-[11px] text-gray-300 flex items-center gap-1.5">
+              <i class="fa-solid fa-sliders text-amber-400"></i>
+              <span>ป้อนค่าชดเชย (Offset):</span>
+            </label>
+            <div class="relative w-28">
+              <input type="number" id="inputManualOffset" value="0.0" step="0.1" onchange="applyManualOffset()" onkeyup="applyManualOffset()"
+                     class="w-full bg-studio-800 border border-amber-500/50 rounded-md px-2 py-1 text-xs font-mono text-amber-400 text-right focus:outline-none focus:border-amber-400">
+              <span class="absolute right-2 top-1 text-[10px] text-gray-500">dB</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+
+    <!-- RIGHT COLUMN -->
+    <div class="lg:col-span-8 flex flex-col gap-6">
+
+      <!-- PANEL 3: High-Resolution Visual Spectrum Canvas -->
+      <div class="bg-studio-800 rounded-2xl p-5 border border-gray-800 shadow-xl flex flex-col gap-3 relative">
+        
+        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-gray-700/60 pb-3">
+          <div class="flex items-center gap-2">
+            <i class="fa-solid fa-chart-area text-pink-400"></i>
+            <h2 class="font-bold text-base text-white">ตัววิเคราะห์สเปกตรัมความถี่ (FFT Spectrum)</h2>
+          </div>
+
+          <div class="flex flex-wrap items-center gap-2 text-xs">
+            <div class="bg-studio-900 p-0.5 rounded-lg border border-gray-700 flex">
+              <button id="btnScaleLog" onclick="setXScale('log')" class="px-2.5 py-1 rounded-md font-medium text-cyan-400 bg-studio-700">Log</button>
+              <button id="btnScaleLin" onclick="setXScale('linear')" class="px-2.5 py-1 rounded-md font-medium text-gray-400 hover:text-white">Linear</button>
+            </div>
+
+            <button onclick="resetPeakHold()" class="px-2.5 py-1.5 bg-studio-900 hover:bg-studio-700 border border-gray-700 text-gray-300 rounded-lg transition flex items-center gap-1.5">
+              <i class="fa-solid fa-rotate-left text-cyan-400"></i>
+              <span>รีเซ็ต Peak</span>
+            </button>
+
+            <button id="btnFreeze" onclick="toggleFreeze()" class="px-2.5 py-1.5 bg-studio-900 hover:bg-studio-700 border border-gray-700 text-gray-300 rounded-lg transition flex items-center gap-1.5">
+              <i id="freezeIcon" class="fa-solid fa-pause text-amber-400"></i>
+              <span id="freezeText">แช่กราฟ</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="relative w-full bg-studio-900 rounded-xl border border-gray-800 overflow-hidden shadow-inner h-[380px] flex items-center justify-center">
+          <canvas id="spectrumCanvas" class="w-full h-full block cursor-crosshair"></canvas>
+
+          <div id="canvasTooltip" class="hidden absolute top-3 right-3 bg-studio-900/90 border border-cyan-500/50 backdrop-blur text-xs font-mono p-2 rounded-lg pointer-events-none shadow-lg">
+            <div class="text-cyan-400"><span id="tooltipFreq">0</span> Hz</div>
+            <div class="text-pink-400"><span id="tooltipDb">-100</span> <span class="unit-label">dBFS</span></div>
+          </div>
+        </div>
+
+        <div class="flex flex-wrap justify-between items-center text-xs text-gray-400 pt-1">
+          <div class="flex items-center gap-4">
+            <span class="flex items-center gap-1.5"><span class="w-3 h-0.5 bg-cyan-400"></span> สเปกตรัมปัจจุบัน</span>
+            <span class="flex items-center gap-1.5"><span class="w-3 h-0.5 bg-pink-500"></span> เส้น Peak Hold Max</span>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <button onclick="exportPNG()" class="px-3 py-1 bg-studio-900 hover:bg-studio-700 border border-gray-700 text-gray-200 rounded-lg transition flex items-center gap-1.5">
+              <i class="fa-solid fa-image text-cyan-400"></i> บันทึกรูปกราฟ
+            </button>
+            <button onclick="exportCSV()" class="px-3 py-1 bg-studio-900 hover:bg-studio-700 border border-gray-700 text-gray-200 rounded-lg transition flex items-center gap-1.5">
+              <i class="fa-solid fa-file-csv text-green-400"></i> ส่งออกข้อมูล (CSV)
+            </button>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- PANEL 4: Real-time Metric Readouts & Signal Meters -->
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+
+        <div class="bg-studio-800 rounded-2xl p-4 border border-gray-800 shadow-xl flex flex-col justify-between">
+          <div class="text-xs text-gray-400 font-medium flex items-center justify-between">
+            <span>ความถี่สูงสุด (Peak Freq)</span>
+            <i class="fa-solid fa-bolt text-cyan-400"></i>
+          </div>
+          <div class="mt-2 flex items-baseline gap-1">
+            <span id="readoutPeakFreq" class="text-2xl font-extrabold font-mono text-cyan-400 text-glow-cyan">0</span>
+            <span class="text-[10px] text-gray-400 font-mono">Hz</span>
+          </div>
+          <p id="readoutPeakKhz" class="text-[11px] text-gray-500 font-mono mt-1">0.000 kHz</p>
+        </div>
+        
+        <div class="bg-studio-800 rounded-2xl p-4 border border-gray-800 shadow-xl flex flex-col justify-between">
+          <div class="text-xs text-gray-400 font-medium flex items-center justify-between">
+            <span>ความเพี้ยน (THD)</span>
+            <i class="fa-solid fa-wave-square text-purple-400"></i>
+          </div>
+          <div class="mt-2 flex items-baseline gap-1">
+            <span id="readoutTHD" class="text-2xl font-extrabold font-mono text-purple-400 text-glow-purple">0.00</span>
+            <span class="text-[10px] text-gray-400 font-mono">%</span>
+          </div>
+          <p id="readoutTHD_dB" class="text-[11px] text-gray-500 font-mono mt-1">- dB</p>
+        </div>
+
+        <div class="bg-studio-800 rounded-2xl p-4 border border-gray-800 shadow-xl flex flex-col justify-between">
+          <div class="text-xs text-gray-400 font-medium flex items-center justify-between">
+            <span>ความแรงเสียง (Level)</span>
+            <span id="readoutLiveDb" class="font-mono text-[10px] text-green-400 font-bold">-100.0 <span class="unit-label">dBFS</span></span>
+          </div>
+
+          <div class="my-2 bg-studio-900 rounded-full h-3 overflow-hidden p-0.5 border border-gray-800 flex">
+            <div id="meterBar" class="h-full rounded-full bg-gradient-to-r from-green-500 via-yellow-400 to-red-500 transition-all duration-75 w-0"></div>
+          </div>
+
+          <div class="flex justify-between text-[9px] text-gray-500 font-mono">
+            <span>Min</span>
+            <span>Mid</span>
+            <span>Max</span>
+          </div>
+        </div>
+
+        <div class="bg-studio-800 rounded-2xl p-4 border border-gray-800 shadow-xl flex flex-col justify-between">
+          <div class="text-xs text-gray-400 font-medium flex items-center justify-between">
+            <span>สูงสุด (Max Peak)</span>
+            <i class="fa-solid fa-chart-line text-pink-400"></i>
+          </div>
+          <div class="mt-2 flex items-baseline gap-1">
+            <span id="readoutMaxDb" class="text-2xl font-extrabold font-mono text-pink-500 text-glow-pink">-100.0</span>
+            <span class="text-[10px] text-gray-400 font-mono unit-label">dBFS</span>
+          </div>
+          <p class="text-[11px] text-gray-500 font-mono mt-1">Peak Hold Maximum</p>
+        </div>
+
+      </div>
+
+    </div>
+
+  </main>
+
+  <footer class="bg-studio-800/40 border-t border-gray-800/80 mt-8 py-4 text-center text-xs text-gray-500">
+    AudioSweep Studio &copy; 2026 | Built for Audio Engineering, Speaker Testing, and Room Calibration.
+  </footer>
+
+  <script>
+    // --- Web Audio State Variables ---
+    let audioCtx = null;
+    let masterGainNode = null;
+    let currentOscNode = null;
+    let fixedOscNode = null;
+    let micStream = null;
+    let micSourceNode = null;
+    let analyserNode = null;
+
+    // --- Generator State ---
+    let generatorMode = 'sweep';
+    let isPlaying = false;
+    let sweepDuration = 2.0;
+    let startFreq = 10000;
+    let endFreq = 20000;
+    let fixedFreq = 1000;
+    let masterVolume = 0.5;
+
+    // --- Spectrum Visualizer & Calibration State ---
+    let fftSize = 8192;
+    let dataArray = null;
+    let peakHoldArray = null;
+    let maxRecordedDb = -100;
+    let peakFreqHz = 0;
+    let xScaleType = 'log';
+    let isFrozen = false;
+    let isMicActive = false;
+    
+    // Calibration Variables
+    let dbOffset = 0;
+    let isCalibrated = false;
+
+    // --- DOM Elements ---
+    const canvas = document.getElementById('spectrumCanvas');
+    const ctx = canvas.getContext('2d');
+    const tooltip = document.getElementById('canvasTooltip');
+    const tooltipFreq = document.getElementById('tooltipFreq');
+    const tooltipDb = document.getElementById('tooltipDb');
+
+    // --- Audio Engine ---
+    function startAudioEngine() {
+      if (!audioCtx) {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        audioCtx = new AudioContextClass();
+
+        masterGainNode = audioCtx.createGain();
+        masterGainNode.gain.setValueAtTime(masterVolume, audioCtx.currentTime);
+        masterGainNode.connect(audioCtx.destination);
+
+        analyserNode = audioCtx.createAnalyser();
+        analyserNode.fftSize = fftSize;
+        analyserNode.smoothingTimeConstant = 0.6;
+
+        allocateFFTBuffers();
+        resizeCanvas();
+        requestAnimationFrame(renderVisualizer);
+      }
+
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+
+      document.getElementById('statusIndicator').className = "w-2.5 h-2.5 rounded-full bg-green-500 shadow-lg shadow-green-500/50";
+      document.getElementById('statusText').innerText = "Engine Active (" + audioCtx.sampleRate + " Hz)";
+      document.getElementById('btnInitAudio').classList.add('hidden');
+    }
+
+    function allocateFFTBuffers() {
+      if (!analyserNode) return;
+      const bufferLength = analyserNode.frequencyBinCount;
+      dataArray = new Float32Array(bufferLength);
+      if (!peakHoldArray || peakHoldArray.length !== bufferLength) {
+        peakHoldArray = new Float32Array(bufferLength).fill(-150);
+      }
+    }
+
+    // --- Control Logic ---
+    function setGeneratorMode(mode) {
+      if (isPlaying) stopAudioGenerator();
+      generatorMode = mode;
+      
+      const tabSweep = document.getElementById('tabModeSweep');
+      const tabFixed = document.getElementById('tabModeFixed');
+      const contSweep = document.getElementById('containerSweepControls');
+      const contFixed = document.getElementById('containerFixedControls');
+
+      if (mode === 'sweep') {
+        tabSweep.className = "py-2 rounded-lg font-semibold bg-cyan-600 text-white transition shadow-sm";
+        tabFixed.className = "py-2 rounded-lg font-semibold text-gray-400 hover:text-white transition";
+        contSweep.classList.remove('hidden');
+        contSweep.classList.add('flex');
+        contFixed.classList.add('hidden');
+        contFixed.classList.remove('flex');
+        document.getElementById('btnPlayText').innerText = "เล่นสัญญาณ Sweep (Play Sweep)";
+      } else {
+        tabFixed.className = "py-2 rounded-lg font-semibold bg-cyan-600 text-white transition shadow-sm";
+        tabSweep.className = "py-2 rounded-lg font-semibold text-gray-400 hover:text-white transition";
+        contFixed.classList.remove('hidden');
+        contFixed.classList.add('flex');
+        contSweep.classList.add('hidden');
+        contSweep.classList.remove('flex');
+        document.getElementById('btnPlayText').innerText = "เปิดเสียง Sine Wave (Play Tone)";
+      }
+    }
+
+    function setFreqPreset(start, end) {
+      document.getElementById('inputStartFreq').value = start;
+      document.getElementById('inputEndFreq').value = end;
+      startFreq = start;
+      endFreq = end;
+    }
+
+    function setDuration(dur) {
+      sweepDuration = dur;
+      document.getElementById('durationValLabel').innerText = dur.toFixed(1) + 's';
+      document.querySelectorAll('.dur-btn').forEach(btn => {
+        if (btn.innerText === dur + 's' || btn.innerText === dur.toFixed(1) + 's') {
+          btn.className = "dur-btn active-dur py-1 rounded bg-cyan-600 text-white font-semibold";
+        } else {
+          btn.className = "dur-btn py-1 rounded bg-studio-900 hover:bg-studio-700 border border-gray-700 text-gray-300";
+        }
+      });
+    }
+
+    function togglePlaySweep() {
+      startAudioEngine();
+      if (isPlaying) {
+        stopAudioGenerator();
+      } else {
+        startAudioGenerator();
+      }
+    }
+
+    function startAudioGenerator() {
+      if (!audioCtx) return;
+      if (document.getElementById('chkSyncSweep').checked) resetPeakHold();
+
+      const now = audioCtx.currentTime;
+
+      if (generatorMode === 'sweep') {
+        startFreq = parseFloat(document.getElementById('inputStartFreq').value) || 10000;
+        endFreq = parseFloat(document.getElementById('inputEndFreq').value) || 20000;
+        const sweepType = document.querySelector('input[name="sweepType"]:checked').value;
+
+        currentOscNode = audioCtx.createOscillator();
+        const sweepGain = audioCtx.createGain();
+        currentOscNode.type = 'sine';
+        currentOscNode.frequency.setValueAtTime(Math.max(1, startFreq), now);
+
+        if (sweepType === 'logarithmic') {
+          currentOscNode.frequency.exponentialRampToValueAtTime(Math.max(1, endFreq), now + sweepDuration);
+        } else {
+          currentOscNode.frequency.linearRampToValueAtTime(endFreq, now + sweepDuration);
+        }
+
+        sweepGain.gain.setValueAtTime(0.0001, now);
+        sweepGain.gain.exponentialRampToValueAtTime(masterVolume, now + 0.03);
+        sweepGain.gain.setValueAtTime(masterVolume, now + sweepDuration - 0.03);
+        sweepGain.gain.exponentialRampToValueAtTime(0.0001, now + sweepDuration);
+
+        currentOscNode.connect(sweepGain);
+        sweepGain.connect(masterGainNode);
+
+        currentOscNode.start(now);
+        currentOscNode.stop(now + sweepDuration);
+
+        currentOscNode.onended = () => stopAudioGenerator();
+      } else {
+        fixedOscNode = audioCtx.createOscillator();
+        const toneGain = audioCtx.createGain();
+        fixedOscNode.type = 'sine';
+        fixedOscNode.frequency.setValueAtTime(fixedFreq, now);
+
+        toneGain.gain.setValueAtTime(0.0001, now);
+        toneGain.gain.linearRampToValueAtTime(masterVolume, now + 0.05);
+
+        fixedOscNode.connect(toneGain);
+        toneGain.connect(masterGainNode);
+        fixedOscNode.start(now);
+      }
+
+      isPlaying = true;
+      document.getElementById('btnPlayIcon').className = "fa-solid fa-stop";
+      document.getElementById('btnPlayText').innerText = "หยุดสัญญาณ (Stop)";
+      document.getElementById('btnPlaySweep').className = "w-full py-3 bg-pink-600 hover:bg-pink-500 text-white font-bold text-sm rounded-xl shadow-lg shadow-pink-500/20 transition flex items-center justify-center gap-2 mt-2";
+    }
+
+    function stopAudioGenerator() {
+      if (currentOscNode) { try { currentOscNode.stop(); currentOscNode.disconnect(); } catch (e) {} currentOscNode = null; }
+      if (fixedOscNode) { try { fixedOscNode.stop(); fixedOscNode.disconnect(); } catch (e) {} fixedOscNode = null; }
+      isPlaying = false;
+      document.getElementById('btnPlayIcon').className = "fa-solid fa-play";
+      document.getElementById('btnPlayText').innerText = generatorMode === 'sweep' ? "เล่นสัญญาณ Sweep (Play Sweep)" : "เปิดเสียง Sine Wave (Play Tone)";
+      document.getElementById('btnPlaySweep').className = "w-full py-3 bg-gradient-to-r from-cyan-500 to-pink-500 hover:from-cyan-400 hover:to-pink-400 text-white font-bold text-sm rounded-xl shadow-lg shadow-cyan-500/20 transition flex items-center justify-center gap-2 mt-2";
+    }
+
+    async function toggleMicrophone() {
+      startAudioEngine();
+      if (isMicActive) {
+        stopMicrophone();
+      } else {
+        try {
+          micStream = await navigator.mediaDevices.getUserMedia({
+            audio: { echoCancellation: false, autoGainControl: false, noiseSuppression: false }
+          });
+          micSourceNode = audioCtx.createMediaStreamSource(micStream);
+          micSourceNode.connect(analyserNode);
+          isMicActive = true;
+          document.getElementById('micStatusText').innerText = "Mic Active";
+          document.getElementById('micStatusText').className = "text-xs font-mono text-green-400 font-bold";
+          document.getElementById('btnMicText').innerText = "ปิดไมโครโฟน (Disable Mic)";
+          document.getElementById('btnToggleMic').className = "w-full py-2.5 bg-red-950/60 hover:bg-red-900 border border-red-500/50 text-red-400 font-semibold text-xs rounded-xl transition flex items-center justify-center gap-2";
+        } catch (err) {
+          alert("ไม่สามารถเข้าถึงไมโครโฟนได้: " + err.message);
+        }
+      }
+    }
+
+    function stopMicrophone() {
+      if (micStream) { micStream.getTracks().forEach(track => track.stop()); micStream = null; }
+      if (micSourceNode) { micSourceNode.disconnect(); micSourceNode = null; }
+      isMicActive = false;
+      document.getElementById('micStatusText').innerText = "Mic Disconnected";
+      document.getElementById('micStatusText').className = "text-xs font-mono text-gray-400";
+      document.getElementById('btnMicText').innerText = "เปิดไมโครโฟนวัดเสียง (Enable Mic)";
+      document.getElementById('btnToggleMic').className = "w-full py-2.5 bg-studio-900 hover:bg-studio-700 border border-green-500/40 text-green-400 font-semibold text-xs rounded-xl transition flex items-center justify-center gap-2";
+    }
+
+    // --- Calibration Logic ---
+    function calibrateMic() {
+      if (!isMicActive) {
+        alert("กรุณาเปิดไมโครโฟนเพื่อรับสัญญาณเสียงจาก Calibrator ก่อนทำการคาลิเบรต");
+        return;
+      }
+      if (maxRecordedDb <= -99) {
+        alert("ยังไม่พบสัญญาณเสียงสำหรับใช้อ้างอิง (กรุณาปล่อยให้ไมค์รับเสียง Calibrator จน Peak เสถียร)");
+        return;
+      }
+      
+      const refDb = parseFloat(document.getElementById('inputCalRef').value) || 94;
+      dbOffset = refDb - maxRecordedDb;
+      
+      updateCalibrationStatus();
+    }
+
+    function applyManualOffset() {
+      const manualVal = parseFloat(document.getElementById('inputManualOffset').value);
+      dbOffset = isNaN(manualVal) ? 0 : manualVal;
+      updateCalibrationStatus();
+    }
+
+    function updateCalibrationStatus() {
+      isCalibrated = (dbOffset !== 0);
+      document.getElementById('inputManualOffset').value = dbOffset.toFixed(1);
+      
+      if (isCalibrated) {
+        document.getElementById('calStatusText').innerText = "Calibrated SPL";
+        document.getElementById('calStatusText').className = "text-[10px] text-amber-400 font-mono font-bold";
+        document.querySelectorAll('.unit-label').forEach(el => el.innerText = "dBSPL");
+      } else {
+        document.getElementById('calStatusText').innerText = "Raw dBFS";
+        document.getElementById('calStatusText').className = "text-[10px] text-gray-500 font-mono";
+        document.querySelectorAll('.unit-label').forEach(el => el.innerText = "dBFS");
+      }
+    }
+
+    function resetCalibration() {
+      dbOffset = 0;
+      updateCalibrationStatus();
+    }
+
+    function updateFFTSize() {
+      fftSize = parseInt(document.getElementById('selectFFTSize').value);
+      if (analyserNode) { analyserNode.fftSize = fftSize; allocateFFTBuffers(); }
+    }
+
+    function setXScale(scale) {
+      xScaleType = scale;
+      document.getElementById('btnScaleLog').className = scale === 'log' ? "px-2.5 py-1 rounded-md font-medium text-cyan-400 bg-studio-700" : "px-2.5 py-1 rounded-md font-medium text-gray-400 hover:text-white";
+      document.getElementById('btnScaleLin').className = scale === 'linear' ? "px-2.5 py-1 rounded-md font-medium text-cyan-400 bg-studio-700" : "px-2.5 py-1 rounded-md font-medium text-gray-400 hover:text-white";
+    }
+
+    function resetPeakHold() {
+      if (peakHoldArray) peakHoldArray.fill(-150);
+      maxRecordedDb = -100;
+      document.getElementById('readoutMaxDb').innerText = "-100.0";
+    }
+
+    function toggleFreeze() {
+      isFrozen = !isFrozen;
+      document.getElementById('freezeIcon').className = isFrozen ? "fa-solid fa-play text-green-400" : "fa-solid fa-pause text-amber-400";
+      document.getElementById('freezeText').innerText = isFrozen ? "เล่นกราฟต่อ" : "แช่กราฟ";
+    }
+
+    function resizeCanvas() {
+      const rect = canvas.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = rect.width * dpr;
+      canvas.height = rect.height * dpr;
+      ctx.scale(dpr, dpr);
+    }
+    window.addEventListener('resize', resizeCanvas);
+
+    const MIN_FREQ = 10;
+    const MAX_FREQ = 22050;
+    const MIN_DB = -100;
+    const MAX_DB = 0;
+
+    function freqToX(freq, width) {
+      if (xScaleType === 'log') {
+        const minLog = Math.log10(MIN_FREQ);
+        const maxLog = Math.log10(MAX_FREQ);
+        const freqLog = Math.log10(Math.max(freq, MIN_FREQ));
+        return ((freqLog - minLog) / (maxLog - minLog)) * width;
+      } else {
+        return ((freq - MIN_FREQ) / (MAX_FREQ - MIN_FREQ)) * width;
+      }
+    }
+
+    function xToFreq(x, width) {
+      if (xScaleType === 'log') {
+        const minLog = Math.log10(MIN_FREQ);
+        const maxLog = Math.log10(MAX_FREQ);
+        return Math.pow(10, minLog + (x / width) * (maxLog - minLog));
+      } else {
+        return MIN_FREQ + (x / width) * (MAX_FREQ - MIN_FREQ);
+      }
+    }
+
+    function dbToY(db, height) {
+      const clampedDb = Math.max(MIN_DB, Math.min(MAX_DB, db));
+      return height - ((clampedDb - MIN_DB) / (MAX_DB - MIN_DB)) * height;
+    }
+
+    function getParabolicPeak(data, bin, binCount) {
+      if (bin <= 0 || bin >= binCount - 1) return data[bin];
+      const alpha = data[bin - 1];
+      const beta = data[bin];
+      const gamma = data[bin + 1];
+      const denominator = alpha - 2 * beta + gamma;
+      if (denominator === 0) return beta;
+      const p = 0.5 * (alpha - gamma) / denominator;
+      return beta - 0.25 * (alpha - gamma) * p;
+    }
+
+    function calculateTHD(data, f1_bin, binCount) {
+      if (f1_bin <= 0) return { thd: 0, thd_db: -100 };
+      const f1_db = getParabolicPeak(data, f1_bin, binCount);
+      const f1_amp = Math.pow(10, f1_db / 20);
+      let sumHarmonicsSq = 0;
+
+      for (let h = 2; h <= 10; h++) {
+        const expectedBin = f1_bin * h;
+        if (expectedBin >= binCount - 1) break;
+
+        const searchWindow = Math.max(2, Math.floor(expectedBin * 0.03));
+        let localMaxBin = expectedBin;
+        let localMaxVal = -150;
+        
+        const startBin = Math.max(0, expectedBin - searchWindow);
+        const endBin = Math.min(binCount - 1, expectedBin + searchWindow);
+
+        for (let b = startBin; b <= endBin; b++) {
+          if (data[b] > localMaxVal) { localMaxVal = data[b]; localMaxBin = b; }
+        }
+
+        if (localMaxVal > -120) {
+          const harm_db = getParabolicPeak(data, localMaxBin, binCount);
+          const harm_amp = Math.pow(10, harm_db / 20);
+          sumHarmonicsSq += (harm_amp * harm_amp);
+        }
+      }
+
+      if (sumHarmonicsSq === 0) return { thd: 0, thd_db: -100 };
+      const thd = (Math.sqrt(sumHarmonicsSq) / f1_amp);
+      return { thd: thd * 100, thd_db: 20 * Math.log10(Math.max(1e-10, thd)) };
+    }
+
+    function renderVisualizer() {
+      requestAnimationFrame(renderVisualizer);
+
+      const width = canvas.clientWidth;
+      const height = canvas.clientHeight;
+      if (width === 0 || height === 0) return;
+
+      ctx.fillStyle = '#0b0f19';
+      ctx.fillRect(0, 0, width, height);
+
+      drawGrid(width, height);
+
+      if (!analyserNode || !dataArray) return;
+
+      if (!isFrozen) {
+        analyserNode.getFloatFrequencyData(dataArray);
+      }
+
+      const sampleRate = audioCtx ? audioCtx.sampleRate : 44100;
+      const binCount = analyserNode.frequencyBinCount;
+      const nyquist = sampleRate / 2;
+
+      let currentPeakDb = -150;
+      let currentPeakBin = 0;
+
+      for (let i = 0; i < binCount; i++) {
+        const db = dataArray[i];
+        if (db > currentPeakDb) { currentPeakDb = db; currentPeakBin = i; }
+        if (db > peakHoldArray[i]) { peakHoldArray[i] = db; }
+      }
+
+      let actualPeakDb = currentPeakDb;
+      if (currentPeakBin > 0 && currentPeakBin < binCount - 1) {
+          actualPeakDb = getParabolicPeak(dataArray, currentPeakBin, binCount);
+      }
+      peakFreqHz = Math.round(currentPeakBin * (nyquist / binCount));
+      
+      if (actualPeakDb > maxRecordedDb) {
+        maxRecordedDb = actualPeakDb;
+      }
+
+      if (actualPeakDb > -60 && peakFreqHz > 20) {
+        const thdData = calculateTHD(dataArray, currentPeakBin, binCount);
+        document.getElementById('readoutTHD').innerText = thdData.thd.toFixed(3);
+        document.getElementById('readoutTHD_dB').innerText = thdData.thd_db.toFixed(1) + " dB";
+      } else {
+        document.getElementById('readoutTHD').innerText = "0.00";
+        document.getElementById('readoutTHD_dB').innerText = "- dB";
+      }
+
+      document.getElementById('readoutPeakFreq').innerText = peakFreqHz.toLocaleString();
+      document.getElementById('readoutPeakKhz').innerText = (peakFreqHz / 1000).toFixed(3) + " kHz";
+      
+      const displayLiveDb = actualPeakDb + dbOffset;
+      const displayMaxDb = maxRecordedDb + dbOffset;
+      document.getElementById('readoutLiveDb').innerText = (actualPeakDb <= -140 ? "-100.0" : displayLiveDb.toFixed(1)) + " ";
+      document.getElementById('readoutLiveDb').innerHTML += `<span class="unit-label">${isCalibrated ? "dBSPL" : "dBFS"}</span>`;
+      document.getElementById('readoutMaxDb').innerText = (maxRecordedDb <= -140 ? "-100.0" : displayMaxDb.toFixed(1));
+
+      const meterPercent = Math.max(0, Math.min(100, ((actualPeakDb - MIN_DB) / (MAX_DB - MIN_DB)) * 100));
+      document.getElementById('meterBar').style.width = meterPercent + "%";
+
+      ctx.beginPath();
+      ctx.strokeStyle = '#ec4899';
+      ctx.lineWidth = 1.5;
+
+      for (let i = 0; i < binCount; i++) {
+        const freq = i * (nyquist / binCount);
+        if (freq < MIN_FREQ) continue;
+        const x = freqToX(freq, width);
+        const y = dbToY(peakHoldArray[i], height);
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.strokeStyle = '#06b6d4';
+      ctx.lineWidth = 1.8;
+
+      const fillGradient = ctx.createLinearGradient(0, 0, 0, height);
+      fillGradient.addColorStop(0, 'rgba(6, 182, 212, 0.35)');
+      fillGradient.addColorStop(1, 'rgba(6, 182, 212, 0.0)');
+
+      ctx.moveTo(0, height);
+      for (let i = 0; i < binCount; i++) {
+        const freq = i * (nyquist / binCount);
+        if (freq < MIN_FREQ) continue;
+        const x = freqToX(freq, width);
+        const y = dbToY(dataArray[i], height);
+        ctx.lineTo(x, y);
+      }
+      ctx.lineTo(width, height);
+      ctx.fillStyle = fillGradient;
+      ctx.fill();
+
+      ctx.beginPath();
+      for (let i = 0; i < binCount; i++) {
+        const freq = i * (nyquist / binCount);
+        if (freq < MIN_FREQ) continue;
+        const x = freqToX(freq, width);
+        const y = dbToY(dataArray[i], height);
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+
+      if (actualPeakDb > MIN_DB + 10) {
+        const peakX = freqToX(peakFreqHz, width);
+        const peakY = dbToY(actualPeakDb, height);
+        ctx.fillStyle = '#22c55e';
+        ctx.beginPath(); ctx.arc(peakX, peakY, 4, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#22c55e'; ctx.font = '10px monospace';
+        ctx.fillText(peakFreqHz + "Hz", Math.min(width - 50, peakX + 6), Math.max(15, peakY - 6));
+      }
+    }
+
+    function drawGrid(width, height) {
+      ctx.strokeStyle = '#1f2937';
+      ctx.fillStyle = '#6b7280';
+      ctx.font = '10px sans-serif';
+      ctx.lineWidth = 1;
+
+      const freqGridTicks = [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 15000, 20000];
+      freqGridTicks.forEach(freq => {
+        const x = freqToX(freq, width);
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, height); ctx.stroke();
+        let label = freq >= 1000 ? (freq / 1000) + 'k' : freq;
+        ctx.fillText(label, x + 2, height - 6);
+      });
+
+      const dbGridTicks = [0, -12, -24, -36, -48, -60, -72, -84, -96];
+      dbGridTicks.forEach(db => {
+        const y = dbToY(db, height);
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke();
+        
+        const displayDb = db + dbOffset;
+        ctx.fillText(displayDb.toFixed(0) + (isCalibrated ? '' : 'dB'), 4, y - 4);
+      });
+    }
+
+    canvas.addEventListener('mousemove', (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+
+      const freq = Math.round(xToFreq(x, canvas.clientWidth));
+      const db = ((canvas.clientHeight - y) / canvas.clientHeight) * (MAX_DB - MIN_DB) + MIN_DB;
+      const displayDb = db + dbOffset;
+
+      tooltip.classList.remove('hidden');
+      tooltipFreq.innerText = freq.toLocaleString();
+      tooltipDb.innerHTML = `${displayDb.toFixed(1)} <span class="unit-label">${isCalibrated ? "dBSPL" : "dBFS"}</span>`;
+    });
+
+    canvas.addEventListener('mouseleave', () => tooltip.classList.add('hidden'));
+
+    document.getElementById('sliderVolume').addEventListener('input', (e) => {
+      masterVolume = parseFloat(e.target.value);
+      document.getElementById('volumeValLabel').innerText = Math.round(masterVolume * 100) + "%";
+      if (masterGainNode && audioCtx) masterGainNode.gain.setValueAtTime(masterVolume, audioCtx.currentTime);
+    });
+
+    document.getElementById('sliderFixedFreq').addEventListener('input', (e) => {
+      fixedFreq = parseFloat(e.target.value);
+      document.getElementById('fixedFreqValue').innerText = fixedFreq.toLocaleString() + " Hz";
+      if (fixedOscNode && audioCtx) fixedOscNode.frequency.setValueAtTime(fixedFreq, audioCtx.currentTime);
+    });
+
+    function exportPNG() {
+      const link = document.createElement('a');
+      link.download = `AudioSweep_Response_${new Date().toISOString().slice(0,10)}.png`;
+      link.href = canvas.toDataURL("image/png");
+      link.click();
+    }
+
+    function exportCSV() {
+      if (!peakHoldArray || !analyserNode) return;
+      const sampleRate = audioCtx ? audioCtx.sampleRate : 44100;
+      const binCount = analyserNode.frequencyBinCount;
+      const nyquist = sampleRate / 2;
+
+      let csvContent = `data:text/csv;charset=utf-8,Frequency (Hz),Peak Amplitude (${isCalibrated ? 'dBSPL' : 'dBFS'})\n`;
+
+      for (let i = 0; i < binCount; i++) {
+        const freq = (i * (nyquist / binCount)).toFixed(2);
+        const db = (peakHoldArray[i] + dbOffset).toFixed(2);
+        csvContent += `${freq},${db}\n`;
+      }
+
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement('a');
+      link.setAttribute('href', encodedUri);
+      link.setAttribute('download', `frequency_response_${startFreq}Hz_${endFreq}Hz.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  </script>
+</body>
+</html>

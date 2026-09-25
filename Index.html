@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>หน้าแรก (Index)</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        /* ตั้งค่าพื้นหลังสีดำ และจัดกึ่งกลางหน้าจอแบบสมบูรณ์ */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #7D7474;
+            color: #ffffff;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        /* กรอบคอนเทนเนอร์ตรงกลาง */
+        .container {
+            text-align: center;
+            width: 100%;
+            max-width: 360px;
+            padding: 20px;
+        }
+
+        h1 {
+            margin-bottom: 24px;
+            color: #f1f1f1;
+            font-size: 1.8rem;
+        }
+
+        nav ul {
+            list-style-type: none;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        /* ตกแต่งปุ่มสไตล์ Dark Theme */
+        .btn {
+            display: block;
+            padding: 14px 20px;
+            background-color: #1e1e1e;
+            color: #e0e0e0;
+            text-decoration: none;
+            text-align: center;
+            border-radius: 10px;
+            font-weight: 600;
+            border: 1px solid #333333;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+            transition: all 0.25s ease;
+        }
+
+        /* เอฟเฟกต์เมื่อวางเมาส์เหนือปุ่ม */
+        .btn:hover {
+            background-color: #007bff;
+            color: #ffffff;
+            border-color: #007bff;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 15px rgba(0, 123, 255, 0.3);
+        }
+
+        /* เอฟเฟกต์เมื่อคลิกปุ่ม */
+        .btn:active {
+            transform: translateY(0);
+            box-shadow: 0 2px 5px rgba(0, 123, 255, 0.2);
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>เมนูหลัก</h1>
+        <nav>
+            <ul>
+                <li><a href="AudioSweepCal-V1.1.html" class="btn">ทดสอบวัดผลตอบสนองทางความถี่</a></li>
+                <li><a href="Juner.html" class="btn">ปรับจูนเสียงเครื่องดนตรี</a></li>
+                <li><a href="page3.html" class="btn">ไปที่ หน้าที่ 3</a></li>
+                <li><a href="page4.html" class="btn">ไปที่ หน้าที่ 4</a></li>
+            </ul>
+        </nav>
+    </div>
+
+</body>
+</html>
