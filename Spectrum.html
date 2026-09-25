@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio Spectrum Analyzer & 1/3 Octave</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #121212;
+            color: #ffffff;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            text-align: center;
+            width: 100%;
+            max-width: 800px;
+            padding: 25px;
+            background-color: #1e1e1e;
+            border-radius: 16px;
+            border: 1px solid #333;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            margin-bottom: 20px;
+            color: #f1f1f1;
+        }
+
+        /* ส่วนควบคุม Mode และ Calibration */
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            justify-content: space-between;
+            background-color: #262626;
+            padding: 15px;
+            border-radius: 10px;
+            border: 1px solid #3d3d3d;
+            margin-bottom: 20px;
+        }
+
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 0.9rem;
+            color: #ccc;
+        }
+
+        select, input[type="number"] {
+            padding: 8px 12px;
+            background-color: #121212;
+            border: 1px solid #444;
+            border-radius: 6px;
+            color: #00e676;
+            font-weight: bold;
+            outline: none;
+        }
+
+        /* Canvas สำหรับวาด กราฟสเปคตรัม */
+        .canvas-container {
+            position: relative;
+            width: 100%;
+            height: 320px;
+            background-color: #0a0a0a;
+            border-radius: 10px;
+            border: 1px solid #333;
+            overflow: hidden;
+            margin-bottom: 20px;
+        }
+
+        canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        /* ปุ่มกด */
+        .btn {
+            display: inline-block;
+            width: 100%;
+            padding: 14px;
+            background-color: #007bff;
+            color: #ffffff;
+            border: none;
+            border-radius: 10px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .btn:hover {
+            background-color: #0056b3;
+        }
+
+        .btn.stop {
+            background-color: #ff5252;
+        }
+
+        .btn.stop:hover {
+            background-color: #d32f2f;
+        }
+
+        .status {
+            margin-top: 15px;
+            font-size: 0.85rem;
+            color: #aaa;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>Audio Spectrum Analyzer</h1>
+
+        <!-- แผงควบคุมการทำงาน -->
+        <div class="controls">
+            <div class="control-group">
+                <label for="modeSelect">โหมดการแสดงผล:</label>
+                <select id="modeSelect">
+                    <option value="octave31">1/3 Octave Band (31 Bands)</option>
+                    <option value="octave10">1/1 Octave Band (10 Bands)</option>
+                    <option value="fft">Full Spectrum (FFT Line)</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label for="offsetInput">Calibrate (dB):</label>
+                <input type="number" id="offsetInput" value="0" min="-50" max="50">
+            </div>
+        </div>
+
+        <!-- หน้าจอแสดงผล Canvas -->
+        <div class="canvas-container">
+            <canvas id="analyzerCanvas"></canvas>
+        </div>
+
+        <button id="startBtn" class="btn">เริ่มวิเคราะห์สัญญาณเสียง</button>
+        <p id="statusText" class="status">กดปุ่มเพื่ออนุญาตใช้งานไมโครโฟน</p>
+    </div>
+
+    <script>
+        let audioContext;
+        let analyser;
+        let microphone;
+        let animationId;
+        let isMeasuring = false;
+
+        const startBtn = document.getElementById('startBtn');
+        const modeSelect = document.getElementById('modeSelect');
+        const offsetInput = document.getElementById('offsetInput');
+        const statusText = document.getElementById('statusText');
+        const canvas = document.getElementById('analyzerCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // ปรับขนาด Canvas ตามขนาดการแสดงผลจริง
+        function resizeCanvas() {
+            canvas.width = canvas.offsetWidth;
+            canvas.height = canvas.offsetHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // ย่านความถี่มาตรฐาน ISO 31 Bands (1/3 Octave)
+        const ISO_31_BANDS = [
+            20, 25, 31.5, 40, 50, 63, 80, 100, 125, 160, 200, 250, 315, 400, 500, 630, 800,
+            1000, 1250, 1600, 2000, 2500, 3150, 4000, 5000, 6300, 8000, 10000, 12500, 16000, 20000
+        ];
+
+        // ย่านความถี่มาตรฐาน ISO 10 Bands (1/1 Octave)
+        const ISO_10_BANDS = [31.5, 63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
+
+        startBtn.addEventListener('click', () => {
+            if (!isMeasuring) {
+                startAudio();
+            } else {
+                stopAudio();
+            }
+        });
+
+        async function startAudio() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+                
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                analyser = audioContext.createAnalyser();
+                microphone = audioContext.createMediaStreamSource(stream);
+
+                analyser.fftSize = 8192; // ใช้ FFT ขนาดใหญ่เพื่อความแม่นยำในย่านความถี่ต่ำ
+                analyser.smoothingTimeConstant = 0.75;
+
+                microphone.connect(analyser);
+
+                isMeasuring = true;
+                startBtn.innerText = 'หยุดการวิเคราะห์';
+                startBtn.classList.add('stop');
+                statusText.innerText = 'กำลังวิเคราะห์สเปคตรัมเสียง...';
+
+                draw();
+
+            } catch (err) {
+                alert('ไม่สามารถเข้าถึงไมโครโฟนได้: ' + err.message);
+            }
+        }
+
+        function stopAudio() {
+            if (audioContext) {
+                audioContext.close();
+            }
+            cancelAnimationFrame(animationId);
+            isMeasuring = false;
+            startBtn.innerText = 'เริ่มวิเคราะห์สัญญาณเสียง';
+            startBtn.classList.remove('stop');
+            statusText.innerText = 'หยุดการทำงานแล้ว';
+            
+            // ล้างหน้าจอ Canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+
+        function draw() {
+            if (!isMeasuring) return;
+
+            animationId = requestAnimationFrame(draw);
+
+            const bufferLength = analyser.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+            analyser.getByteFrequencyData(dataArray);
+
+            const width = canvas.width;
+            const height = canvas.height;
+            const sampleRate = audioContext.sampleRate;
+            const offset = parseInt(offsetInput.value) || 0;
+            const mode = modeSelect.value;
+
+            ctx.clearRect(0, 0, width, height);
+
+            // วาดเส้นกริดพื้นหลัง (Grid Lines)
+            drawGrid(width, height);
+
+            if (mode === 'octave31') {
+                drawOctaveBands(dataArray, bufferLength, sampleRate, ISO_31_BANDS, offset, width, height);
+            } else if (mode === 'octave10') {
+                drawOctaveBands(dataArray, bufferLength, sampleRate, ISO_10_BANDS, offset, width, height);
+            } else if (mode === 'fft') {
+                drawFFTLine(dataArray, bufferLength, offset, width, height);
+            }
+        }
+
+        // คำนวณและวาดแท่งกราฟ Octave Band Filter
+        function drawOctaveBands(dataArray, bufferLength, sampleRate, centerFreqs, offset, width, height) {
+            const numBands = centerFreqs.length;
+            const barWidth = (width / numBands) - 2;
+
+            for (let i = 0; i < numBands; i++) {
+                const centerFreq = centerFreqs[i];
+                // คำนวณช่วงความถี่ของ 1/3 หรือ 1/1 Octave Band (f_low และ f_high)
+                const factor = Math.pow(2, (centerFreqs.length === 31 ? 1/6 : 1/2));
+                const lowerFreq = centerFreq / factor;
+                const upperFreq = centerFreq * factor;
+
+                // แปลงความถี่เป็นดัชนี Array ของ FFT (Bin index)
+                const lowIndex = Math.floor((lowerFreq / (sampleRate / 2)) * bufferLength);
+                const highIndex = Math.min(Math.ceil((upperFreq / (sampleRate / 2)) * bufferLength), bufferLength - 1);
+
+                // หาค่าเฉลี่ยพลังงานในย่านความถี่นั้นๆ
+                let sum = 0;
+                let count = 0;
+                for (let j = lowIndex; j <= highIndex; j++) {
+                    sum += dataArray[j];
+                    count++;
+                }
+                const avgValue = count > 0 ? sum / count : 0;
+
+                // รวมค่า Calibration Offset และแปลงเป็นความสูงพิกเซล
+                let calibratedValue = Math.min(Math.max(avgValue + (offset * 1.5), 0), 255);
+                const barHeight = (calibratedValue / 255) * height;
+                const x = i * (barWidth + 2);
+                const y = height - barHeight;
+
+                // Gradient สีแท่งกราฟ
+                const gradient = ctx.createLinearGradient(0, height, 0, 0);
+                gradient.addColorStop(0, '#00e676');
+                gradient.addColorStop(0.7, '#ffeb3b');
+                gradient.addColorStop(1, '#ff5252');
+
+                ctx.fillStyle = gradient;
+                ctx.fillRect(x, y, barWidth, barHeight);
+
+                // แสดงข้อความความถี่ใต้แท่งกราฟบางจุดเพื่อความสวยงาม
+                if (numBands === 10 || i % 3 === 0) {
+                    ctx.fillStyle = '#888';
+                    ctx.font = '10px Arial';
+                    ctx.textAlign = 'center';
+                    let label = centerFreq >= 1000 ? (centerFreq/1000) + 'k' : centerFreq;
+                    ctx.fillText(label, x + barWidth / 2, height - 4);
+                }
+            }
+        }
+
+        // วาดกราฟเส้น FFT สเปคตรัมต่อเนื่อง
+        function drawFFTLine(dataArray, bufferLength, offset, width, height) {
+            ctx.beginPath();
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = '#00e676';
+
+            const sliceWidth = width / bufferLength;
+            let x = 0;
+
+            for (let i = 0; i < bufferLength; i++) {
+                let calibratedValue = Math.min(Math.max(dataArray[i] + (offset * 1.5), 0), 255);
+                const v = calibratedValue / 255.0;
+                const y = height - (v * height);
+
+                if (i === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+
+                x += sliceWidth;
+            }
+
+            ctx.lineTo(width, height);
+            ctx.stroke();
+        }
+
+        // วาดเส้นกริด dB แบ็คกราวด์
+        function drawGrid(width, height) {
+            ctx.strokeStyle = '#222';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+
+            // เส้นแนวนอนแสดงระดับ dB
+            for (let y = 0; y < height; y += height / 4) {
+                ctx.moveTo(0, y);
+                ctx.lineTo(width, y);
+            }
+            ctx.stroke();
+        }
+    </script>
+
+</body>
+</html>
